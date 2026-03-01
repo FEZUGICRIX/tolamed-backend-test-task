@@ -15,6 +15,10 @@ services:
       DATABASE_URL: postgres://app:app@postgres:5432/appdb
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      # Development volumes for Hot Reload
+    volumes:
+      - .:/app # Мапим корень, чтобы подхватывались конфиги типа tsconfig.json
+      - /app/node_modules # Изолируем зависимости контейнера от хоста
     depends_on:
       postgres:
         condition: service_healthy

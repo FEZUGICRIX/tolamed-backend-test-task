@@ -23,9 +23,20 @@ export async function spendUserBonus(
       throw createAppError('amount must be a positive integer', 400);
     }
 
-    await spendBonus(req.params.id, amount);
+    // Извлекаем requestId: приоритет у header Idempotency-Key
+    const requestId =
+      req.headers['idempotency-key'] || req.body?.requestId;
 
-    res.json({ success: true });
+    if (!requestId || typeof requestId !== 'string') {
+      throw createAppError('requestId or Idempotency-Key header is required', 400);
+    }
+
+    const result = await spendBonus(req.params.id, amount, requestId, { amount });
+
+    res.json({
+      success: true,
+      duplicated: result.duplicated,
+    });
   } catch (error) {
     next(error);
   }
@@ -37,9 +48,23 @@ export async function enqueueExpireAccrualsJob(
   next: NextFunction,
 ): Promise<void> {
   try {
-    await bonusQueue.add('expireAccruals', {
-      createdAt: new Date().toISOString(),
-    });
+    // Используем предсказуемый jobId для защиты от дублей
+    await bonusQueue.add(
+      'expireAccruals',
+      {
+        createdAt: new Date().toISOString(),
+      },
+      {
+        jobId: 'expire-accruals',
+        removeOnComplete: true,
+        removeOnFail: false,
+        attempts: 3,
+        backoff: {
+          type: 'exponential',
+          delay: 1000,
+        },
+      },
+    );
 
     res.json({ queued: true });
   } catch (error) {
